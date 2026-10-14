@@ -2,14 +2,14 @@
 
 
 
-WG Working Group                                              Y. N. Here
-Internet-Draft                                    Your Organization Here
-Intended status: Informational                           14 October 2026
+MASQUE                                                        M. Seemann
+Internet-Draft                                           14 October 2026
+Intended status: Standards Track                                        
 Expires: 17 April 2027
 
 
-                           TODO - Your title
-                  draft-todo-yourname-protocol-latest
+                    qlog Definitions for CONNECT-IP
+              draft-seemann-masque-connect-ip-qlog-latest
 
 Abstract
 
@@ -19,17 +19,21 @@ About This Document
 
    This note is to be removed before publishing as an RFC.
 
-   The latest revision of this draft can be found at
-   https://example.com/LATEST.  Status information for this document may
-   be found at https://datatracker.ietf.org/doc/draft-todo-yourname-
-   protocol/.
+   The latest revision of this draft can be found at https://marten-
+   seemann.github.io/draft-seemann-masque-connect-ip-qlog/draft-seemann-
+   masque-connect-ip-qlog.html.  Status information for this document
+   may be found at https://datatracker.ietf.org/doc/draft-seemann-
+   masque-connect-ip-qlog/.
 
-   Discussion of this document takes place on the WG Working Group
-   mailing list (mailto:WG@example.com), which is archived at
-   https://example.com/WG.
+   Discussion of this document takes place on the Multiplexed
+   Application Substrate over QUIC Encryption Working Group mailing list
+   (mailto:masque@ietf.org), which is archived at
+   https://mailarchive.ietf.org/arch/browse/masque/.  Subscribe at
+   https://www.ietf.org/mailman/listinfo/masque/.
 
    Source for this draft and an issue tracker can be found at
-   https://github.com/USER/REPO.
+   https://github.com/marten-seemann/draft-seemann-masque-connect-ip-
+   qlog.
 
 Status of This Memo
 
@@ -109,6 +113,5 @@ Acknowledgments
 
 Author's Address
 
-   Your Name Here
-   Your Organization Here
-   Email: your.email@example.com
+   Marten Seemann
+   Email: martenseemann@gmail.com
