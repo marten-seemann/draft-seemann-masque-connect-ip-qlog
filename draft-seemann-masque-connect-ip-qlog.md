@@ -19,35 +19,34 @@
 # Change the file extension to match the format (.xml for XML, etc...)
 #
 ###
-title: "TODO - Your title"
-abbrev: "TODO - Abbreviation"
-category: info
+title: "qlog Definitions for CONNECT-IP"
+abbrev: "CONNECT-IP qlog"
+category: std
 
-docname: draft-todo-yourname-protocol-latest
+docname: draft-seemann-masque-connect-ip-qlog-latest
 submissiontype: IETF  # also: "independent", "editorial", "IAB", or "IRTF"
 number:
 date:
 consensus: true
 v: 3
-area: AREA
-workgroup: WG Working Group
+area: "Web and Internet Transport"
+wg: MASQUE
 keyword:
- - next generation
- - unicorn
- - AI-native
+ - masque
+ - connect-ip
+ - qlog
 venue:
-  group: WG
+  group: "Multiplexed Application Substrate over QUIC Encryption"
   type: Working Group
-  mail: WG@example.com
-  arch: https://example.com/WG
-  github: USER/REPO
-  latest: https://example.com/LATEST
+  mail: "masque@ietf.org"
+  arch: "https://mailarchive.ietf.org/arch/browse/masque/"
+  github: "marten-seemann/draft-seemann-masque-connect-ip-qlog"
+  latest: "https://marten-seemann.github.io/draft-seemann-masque-connect-ip-qlog/draft-seemann-masque-connect-ip-qlog.html"
 
 author:
  -
-    fullname: Your Name Here
-    organization: Your Organization Here
-    email: your.email@example.com
+    fullname: Marten Seemann
+    email: martenseemann@gmail.com
 
 normative:
 
