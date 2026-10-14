@@ -17,7 +17,7 @@ keyword:
  - qlog
 venue:
   group: "Multiplexed Application Substrate over QUIC Encryption"
-  type: Working Group
+  type: "Working Group"
   mail: "masque@ietf.org"
   arch: "https://mailarchive.ietf.org/arch/browse/masque/"
   github: "marten-seemann/draft-seemann-masque-connect-ip-qlog"
