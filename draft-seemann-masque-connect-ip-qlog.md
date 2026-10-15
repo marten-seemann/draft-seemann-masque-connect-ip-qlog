@@ -31,6 +31,7 @@ author:
 normative:
   QLOG-MAIN: I-D.ietf-quic-qlog-main-schema
   QLOG-HTTP: I-D.ietf-quic-qlog-h3-events
+  QLOG-QUIC: I-D.ietf-quic-qlog-quic-events
   CONNECT-IP: RFC9484
   CONNECT-IP-DNS: I-D.ietf-masque-connect-ip-dns
   CDDL: RFC8610
@@ -42,9 +43,10 @@ informative:
 
 --- abstract
 
-This document defines qlog representations for the capsules used by CONNECT-IP,
-including the DNS and PREF64 configuration extensions. These representations
-extend the HTTP capsule events defined in the HTTP/3 qlog event schema.
+This document defines qlog events for CONNECT-IP packet processing and
+representations for its capsules, including the DNS and PREF64 configuration
+extensions. It extends the HTTP event schema defined in the HTTP/3 qlog
+document.
 
 
 --- middle
@@ -55,8 +57,11 @@ CONNECT-IP ({{CONNECT-IP}}) uses capsules to exchange address assignments,
 address requests, and routing information. {{CONNECT-IP-DNS}} defines
 additional capsules for DNS and PREF64 configuration.
 
-This document defines how these capsules are represented in qlog
-({{QLOG-MAIN}}), using the HTTP capsule events defined in {{QLOG-HTTP}}.
+This document defines how these capsules and IP packet processing are
+represented in qlog ({{QLOG-MAIN}}). Packet events record forwarding decisions
+for inputs from the peer and the local application, including rejected inputs
+and generated ICMP responses. Capsule representations use the HTTP events
+defined in {{QLOG-HTTP}}.
 
 
 # Conventions and Definitions
@@ -64,7 +69,8 @@ This document defines how these capsules are represented in qlog
 {::boilerplate bcp14-tagged}
 
 The data types are defined using CDDL ({{CDDL}}). The `uint8`, `uint16`,
-`uint64`, `hexstring`, and `RawInfo` types are defined in {{QLOG-MAIN}}.
+`uint32`, `uint64`, `hexstring`, and `RawInfo` types are defined in {{QLOG-MAIN}}.
+`ECN` is defined in {{QLOG-QUIC}}.
 
 
 # Event Schemas {#schema}
@@ -79,15 +85,15 @@ trace's `event_schemas` field, as described in {{Section 8 of QLOG-MAIN}}.
 
 Until this document is published as an RFC, implementations MUST NOT use the
 unversioned event schema URIs. Instead, they MUST append a hyphen and the
-two-digit draft number to each extension identifier. For draft 01, the URIs are
-`urn:ietf:params:qlog:events:http#connect-ip-01` and
-`urn:ietf:params:qlog:events:http#connect-ip-dns-01`.
+two-digit draft number to each extension identifier. For draft 00, the URIs are
+`urn:ietf:params:qlog:events:http#connect-ip-00` and
+`urn:ietf:params:qlog:events:http#connect-ip-dns-00`.
 
 
-## Common Capsule Encoding {#capsules}
+## Capsule Encoding {#common-encoding}
 
-The capsule types defined in the following sections extend the `$HTTPCapsule`
-type socket defined in {{Section 7.1 of QLOG-HTTP}}.
+Capsule representations extend the `$HTTPCapsule` type socket defined in
+{{Section 7.1 of QLOG-HTTP}}.
 
 These representations are used in the `capsule` field of
 `http:capsule_created` and `http:capsule_parsed` events. The event's `stream_id`
@@ -98,18 +104,17 @@ Sequence fields preserve the order of entries in the capsule. Empty sequences
 are represented by empty arrays. Integer fields contain their numeric values
 without the variable-length integer encoding.
 
-IP addresses use dotted-decimal notation for IPv4 and the text representation
-defined in {{RFC5952}} for IPv6. An `ip_prefix` combines an address, a slash,
-and a decimal prefix length, for example `192.0.2.0/24` or `2001:db8::/64`.
+In capsule representations, the optional `raw` field uses `RawInfo`. Its
+`length` includes the capsule's Type, Length, and Value fields;
+`payload_length` is the length of the Value field. Both exclude HTTP DATA
+frame headers.
 
-The optional `raw` field uses `RawInfo`. Its `length` includes the capsule's
-Type, Length, and Value fields; `payload_length` is the length of the Value
-field. Both exclude HTTP DATA frame headers.
+# CONNECT-IP Schema {#connect-ip-schema}
 
-# CONNECT-IP Capsule Schema {#connect-ip-schema}
+This schema defines capsule representations and packet processing events for
+{{CONNECT-IP}}. Its URI is `urn:ietf:params:qlog:events:http#connect-ip`.
 
-This schema defines representations for the capsules in {{CONNECT-IP}}. Its URI
-is `urn:ietf:params:qlog:events:http#connect-ip`.
+## Capsules {#capsules}
 
 ~~~ cddl
 ConnectIPCapsule = ConnectIPAddressAssignCapsule /
@@ -119,7 +124,7 @@ ConnectIPCapsule = ConnectIPAddressAssignCapsule /
 $HTTPCapsule /= ConnectIPCapsule
 ~~~
 
-## ADDRESS_ASSIGN {#address-assign}
+### ADDRESS_ASSIGN {#address-assign}
 
 `ConnectIPAddressAssignCapsule` represents the ADDRESS_ASSIGN capsule defined
 in {{Section 4.7.1 of CONNECT-IP}}. Each assigned address records its Request
@@ -134,7 +139,7 @@ ConnectIPAddressAssignCapsule = {
 
 ConnectIPAddress = {
     request_id: uint64
-    ip_prefix: text
+    ip_prefix: IPPrefix
 }
 ~~~
 
@@ -142,7 +147,7 @@ Unsolicited assignments retain Request ID 0. Refused assignments retain the
 prefix `0.0.0.0/32` or `::/128`, as specified in
 {{Section 4.7.2 of CONNECT-IP}}.
 
-## ADDRESS_REQUEST {#address-request}
+### ADDRESS_REQUEST {#address-request}
 
 `ConnectIPAddressRequestCapsule` represents the ADDRESS_REQUEST capsule defined
 in {{Section 4.7.2 of CONNECT-IP}}. Each requested address records its Request
@@ -157,7 +162,7 @@ ConnectIPAddressRequestCapsule = {
 }
 ~~~
 
-## ROUTE_ADVERTISEMENT {#route-advertisement}
+### ROUTE_ADVERTISEMENT {#route-advertisement}
 
 `ConnectIPRouteAdvertisementCapsule` represents the ROUTE_ADVERTISEMENT capsule
 defined in {{Section 4.7.3 of CONNECT-IP}}. Each range records its inclusive
@@ -172,9 +177,122 @@ ConnectIPRouteAdvertisementCapsule = {
 }
 
 ConnectIPAddressRange = {
-    start_ip: text
-    end_ip: text
+    start_ip: IPAddress
+    end_ip: IPAddress
     ip_protocol: uint8
+}
+~~~
+
+## Packet Processing {#packets}
+
+The `http:connect_ip_packet_processed` event (Base importance) records an IP
+packet after processing, its forwarding decision, and any generated ICMP
+response. `stream_id` identifies the CONNECT-IP request stream. `forwarded`
+means handed to the application or accepted by HTTP for transmission.
+
+~~~ cddl
+ConnectIPPacketProcessed = {
+    stream_id: uint64
+    source: "application" / "peer"
+    packet: ConnectIPPacket
+    outcome: "forwarded" / "dropped"
+    ? reason: "invalid" /
+              "source_address_not_allowed" /
+              "destination_address_not_allowed" /
+              "protocol_not_allowed" /
+              "hop_limit_exceeded" /
+              "packet_too_large" /
+              "send_error" /
+              "other"
+    ? icmp_response: {
+        to: "peer" / "application"
+        packet: ConnectIPPacket
+    }
+    * $$http-connectippacketprocessed-extension
+}
+
+$ProtocolEventData /= ConnectIPPacketProcessed
+~~~
+
+`source` identifies the input as coming from the application or peer.
+`packet` describes it before forwarding changes. `icmp_response` records a
+generated response and its destination.
+
+Capsule and packet events SHOULD be ordered to reflect the address and route
+state used for each decision. A local change can take effect when its capsule
+is created and queued.
+
+### IP Packets {#ip-packets}
+
+Header fields retain their wire values; unavailable fields are omitted.
+IPv6 extension headers appear in wire order. `upper_layer_protocol` identifies
+the protocol after them.
+
+For `raw`, `length` is the observed packet length, `payload_length` excludes
+IP and extension headers, and `data` may contain a prefix of the packet.
+
+~~~ cddl
+ConnectIPPacket = {
+    ? header: ConnectIPIPv4Header / ConnectIPIPv6Header
+    ? extension_headers: [* ConnectIPIPv6ExtensionHeader]
+    ? upper_layer_protocol: uint8
+    ? icmp: ConnectIPICMP
+    ? raw: RawInfo
+}
+~~~
+
+~~~ cddl
+ConnectIPIPv4Header = {
+    version: 4
+    ? ihl: uint8
+    ? dscp: uint8
+    ? ecn: ECN
+    ? total_length: uint16
+    ? identification: uint16
+    ? flags: uint8
+    ? fragment_offset: uint16
+    ? ttl: uint8
+    ? protocol: uint8
+    ? checksum: uint16
+    ? source_address: IPAddress
+    ? destination_address: IPAddress
+    ? options: RawInfo
+}
+~~~
+
+~~~ cddl
+ConnectIPIPv6Header = {
+    version: 6
+    ? dscp: uint8
+    ? ecn: ECN
+    ? flow_label: uint32
+    ? payload_length: uint16
+    ? next_header: uint8
+    ? hop_limit: uint8
+    ? source_address: IPAddress
+    ? destination_address: IPAddress
+}
+
+ConnectIPIPv6ExtensionHeader = {
+    type: uint8
+    ? raw: RawInfo
+}
+~~~
+
+### ICMP {#icmp}
+
+`quoted_packet` describes the packet quoted by an ICMP error. `mtu` is the
+advertised MTU for Packet Too Big or Fragmentation Needed. ICMP `raw` excludes
+the IP header; `payload_length` excludes the ICMP header.
+
+~~~ cddl
+ConnectIPICMP = {
+    ? type: uint8
+    ? code: uint8
+    ? checksum: uint16
+    ? mtu: uint32
+    ? quoted_packet: ConnectIPPacket
+    ? raw: RawInfo
 }
 ~~~
 
@@ -210,8 +328,8 @@ ConnectIPDNSConfiguration = {
 
 ConnectIPDNSNameserver = {
     service_priority: uint16
-    ipv4_addresses: [* text]
-    ipv6_addresses: [* text]
+    ipv4_addresses: [* IPAddress]
+    ipv6_addresses: [* IPAddress]
     authentication_domain_name: text
     service_parameters: [* ConnectIPDNSServiceParameter]
 }
@@ -230,22 +348,47 @@ hexadecimal string. Parameters are listed in ascending key order.
 ## PREF64 {#pref64}
 
 `ConnectIPPREF64Capsule` represents the PREF64 capsule defined in
-{{Section 4.1 of CONNECT-IP-DNS}}. Each prefix uses the same address and prefix
-length notation as `ip_prefix`. The 96 address bits carried in the capsule
+{{Section 4.1 of CONNECT-IP-DNS}}. The 96 address bits carried in the capsule
 are followed by 32 zero bits to form the IPv6 address.
 
 ~~~ cddl
 ConnectIPPREF64Capsule = {
     capsule_type: "pref64"
-    prefixes: [* text]
+    prefixes: [* IPPrefix]
     ? raw: RawInfo
 }
 ~~~
 
 
+# Common Data Types {#common-types}
+
+These types are shared by both event schemas.
+
+## IPAddress
+
+~~~ cddl
+IPAddress = text / hexstring
+~~~
+
+An IP address can be represented as text, hexadecimal bytes, or a redacted
+value. Human-readable IPv4 and IPv6 addresses use dotted-decimal notation
+and {{RFC5952}}, respectively.
+
+## IPPrefix
+
+~~~ cddl
+IPPrefix = text
+~~~
+
+An IP prefix is a textual address, a slash, and a decimal prefix length,
+for example `192.0.2.0/24` or `2001:db8::/64`.
+
+
 # Security Considerations {#security}
 
-TODO Security
+The security and privacy considerations in {{QLOG-MAIN}} apply. Headers,
+configuration, and raw data can reveal network topology, user activity, and
+application data. Implementations should minimize capture and protect logs.
 
 
 # IANA Considerations {#iana}
@@ -253,7 +396,7 @@ TODO Security
 This document requests two entries in the "qlog event schema URIs" registry
 defined in {{Section 15 of QLOG-MAIN}}.
 
-## CONNECT-IP Capsule Schema
+## CONNECT-IP Schema {#iana-connect-ip}
 
 Event schema URI:
 : urn:ietf:params:qlog:events:http#connect-ip
@@ -262,10 +405,10 @@ Namespace:
 : http
 
 Event Types:
-: None. This schema extends the capsule data types of existing events.
+: connect_ip_packet_processed
 
 Description:
-: Capsule representations for CONNECT-IP.
+: Capsule representations and packet processing events for CONNECT-IP.
 
 Reference:
 : {{connect-ip-schema}} of this document.
