@@ -1,0 +1,512 @@
+
+
+
+
+MASQUE                                                        M. Seemann
+Internet-Draft                                           20 October 2026
+Intended status: Standards Track                                        
+Expires: 23 April 2027
+
+
+                    qlog Definitions for CONNECT-IP
+              draft-seemann-masque-connect-ip-qlog-latest
+
+Abstract
+
+   This document defines qlog events for CONNECT-IP packet processing
+   and representations for its capsules, including the DNS and PREF64
+   configuration extensions.  It extends the HTTP event schema defined
+   in the HTTP/3 qlog document.
+
+About This Document
+
+   This note is to be removed before publishing as an RFC.
+
+   The latest revision of this draft can be found at https://marten-
+   seemann.github.io/draft-seemann-masque-connect-ip-qlog/draft-seemann-
+   masque-connect-ip-qlog.html.  Status information for this document
+   may be found at https://datatracker.ietf.org/doc/draft-seemann-
+   masque-connect-ip-qlog/.
+
+   Discussion of this document takes place on the Multiplexed
+   Application Substrate over QUIC Encryption Working Group mailing list
+   (mailto:masque@ietf.org), which is archived at
+   https://mailarchive.ietf.org/arch/browse/masque/.  Subscribe at
+   https://www.ietf.org/mailman/listinfo/masque/.
+
+   Source for this draft and an issue tracker can be found at
+   https://github.com/marten-seemann/draft-seemann-masque-connect-ip-
+   qlog.
+
+Status of This Memo
+
+   This Internet-Draft is submitted in full conformance with the
+   provisions of BCP 78 and BCP 79.
+
+   Internet-Drafts are working documents of the Internet Engineering
+   Task Force (IETF).  Note that other groups may also distribute
+   working documents as Internet-Drafts.  The list of current Internet-
+   Drafts is at https://datatracker.ietf.org/drafts/current/.
+
+   Internet-Drafts are draft documents valid for a maximum of six months
+   and may be updated, replaced, or obsoleted by other documents at any
+   time.  It is inappropriate to use Internet-Drafts as reference
+   material or to cite them other than as "work in progress."
+
+   This Internet-Draft will expire on 23 April 2027.
+
+Copyright Notice
+
+   Copyright (c) 2026 IETF Trust and the persons identified as the
+   document authors.  All rights reserved.
+
+   This document is subject to BCP 78 and the IETF Trust's Legal
+   Provisions Relating to IETF Documents (https://trustee.ietf.org/
+   license-info) in effect on the date of publication of this document.
+   Please review these documents carefully, as they describe your rights
+   and restrictions with respect to this document.  Code Components
+   extracted from this document must include Revised BSD License text as
+   described in Section 4.e of the Trust Legal Provisions and are
+   provided without warranty as described in the Revised BSD License.
+
+Table of Contents
+
+   1.  Introduction
+   2.  Conventions and Definitions
+   3.  Event Schemas
+     3.1.  Draft Event Schema Identification
+     3.2.  Capsule Encoding
+   4.  CONNECT-IP Schema
+     4.1.  Capsules
+       4.1.1.  ADDRESS_ASSIGN
+       4.1.2.  ADDRESS_REQUEST
+       4.1.3.  ROUTE_ADVERTISEMENT
+     4.2.  Packet Processing
+       4.2.1.  IP Packets
+       4.2.2.  ICMP
+   5.  DNS and PREF64 Capsule Schema
+     5.1.  DNS_ASSIGN
+     5.2.  PREF64
+   6.  Common Data Types
+     6.1.  IPAddress
+     6.2.  IPPrefix
+   7.  Security Considerations
+   8.  IANA Considerations
+     8.1.  CONNECT-IP Schema
+     8.2.  DNS and PREF64 Capsule Schema
+   9.  Normative References
+   Author's Address
+
+1.  Introduction
+
+   CONNECT-IP ([CONNECT-IP]) uses capsules to exchange address
+   assignments, address requests, and routing information.
+   [CONNECT-IP-DNS] defines additional capsules for DNS and PREF64
+   configuration.
+
+   This document defines how these capsules and IP packet processing are
+   represented in qlog ([QLOG-MAIN]).  Packet events record forwarding
+   decisions for inputs from the peer and the local application,
+   including rejected inputs and generated ICMP responses.  Capsule
+   representations use the HTTP events defined in [QLOG-HTTP].
+
+2.  Conventions and Definitions
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+   "OPTIONAL" in this document are to be interpreted as described in
+   BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in all
+   capitals, as shown here.
+
+   The data types are defined using CDDL ([CDDL]).  The uint8, uint16,
+   uint32, uint64, hexstring, and RawInfo types are defined in
+   [QLOG-MAIN].  ECN is defined in [QLOG-QUIC].
+
+3.  Event Schemas
+
+   The schemas defined in Section 4 and Section 5 extend the http
+   namespace defined in [QLOG-HTTP].  Implementations SHOULD include the
+   URIs of the schemas they use, together with the HTTP event schema
+   URI, in the trace's event_schemas field, as described in Section 8 of
+   [QLOG-MAIN].
+
+3.1.  Draft Event Schema Identification
+
+   This section is to be removed before publishing as an RFC.
+
+   Until this document is published as an RFC, implementations MUST NOT
+   use the unversioned event schema URIs.  Instead, they MUST append a
+   hyphen and the two-digit draft number to each extension identifier.
+   For draft 00, the URIs are urn:ietf:params:qlog:events:http#connect-
+   ip-00 and urn:ietf:params:qlog:events:http#connect-ip-dns-00.
+
+3.2.  Capsule Encoding
+
+   Capsule representations extend the $HTTPCapsule type socket defined
+   in Section 7.1 of [QLOG-HTTP].
+
+   These representations are used in the capsule field of
+   http:capsule_created and http:capsule_parsed events.  The event's
+   stream_id identifies the CONNECT-IP request stream, allowing multiple
+   sessions and application protocols to share a trace.
+
+   Sequence fields preserve the order of entries in the capsule.  Empty
+   sequences are represented by empty arrays.  Integer fields contain
+   their numeric values without the variable-length integer encoding.
+
+   In capsule representations, the optional raw field uses RawInfo.  Its
+   length includes the capsule's Type, Length, and Value fields;
+   payload_length is the length of the Value field.  Both exclude HTTP
+   DATA frame headers.
+
+4.  CONNECT-IP Schema
+
+   This schema defines capsule representations and packet processing
+   events for [CONNECT-IP].  Its URI is
+   urn:ietf:params:qlog:events:http#connect-ip.
+
+4.1.  Capsules
+
+   ConnectIPCapsule = ConnectIPAddressAssignCapsule /
+                      ConnectIPAddressRequestCapsule /
+                      ConnectIPRouteAdvertisementCapsule
+
+   $HTTPCapsule /= ConnectIPCapsule
+
+4.1.1.  ADDRESS_ASSIGN
+
+   ConnectIPAddressAssignCapsule represents the ADDRESS_ASSIGN capsule
+   defined in Section 4.7.1 of [CONNECT-IP].  Each assigned address
+   records its Request ID and IP prefix.
+
+   ConnectIPAddressAssignCapsule = {
+       capsule_type: "address_assign"
+       assigned_addresses: [* ConnectIPAddress]
+       ? raw: RawInfo
+   }
+
+   ConnectIPAddress = {
+       request_id: uint64
+       ip_prefix: IPPrefix
+   }
+
+   Unsolicited assignments retain Request ID 0.  Refused assignments
+   retain the prefix 0.0.0.0/32 or ::/128, as specified in Section 4.7.2
+   of [CONNECT-IP].
+
+4.1.2.  ADDRESS_REQUEST
+
+   ConnectIPAddressRequestCapsule represents the ADDRESS_REQUEST capsule
+   defined in Section 4.7.2 of [CONNECT-IP].  Each requested address
+   records its Request ID and requested IP prefix, including an
+   unspecified address when the sender has no preference for a
+   particular address.
+
+   ConnectIPAddressRequestCapsule = {
+       capsule_type: "address_request"
+       requested_addresses: [+ ConnectIPAddress]
+       ? raw: RawInfo
+   }
+
+4.1.3.  ROUTE_ADVERTISEMENT
+
+   ConnectIPRouteAdvertisementCapsule represents the ROUTE_ADVERTISEMENT
+   capsule defined in Section 4.7.3 of [CONNECT-IP].  Each range records
+   its inclusive start and end addresses and its IP Protocol value.  A
+   protocol value of 0 retains its meaning of allowing all protocols.
+
+   ConnectIPRouteAdvertisementCapsule = {
+       capsule_type: "route_advertisement"
+       ip_address_ranges: [* ConnectIPAddressRange]
+       ? raw: RawInfo
+   }
+
+   ConnectIPAddressRange = {
+       start_ip: IPAddress
+       end_ip: IPAddress
+       ip_protocol: uint8
+   }
+
+4.2.  Packet Processing
+
+   The http:connect_ip_packet_processed event (Base importance) records
+   an IP packet after processing, its forwarding decision, and any
+   generated ICMP response. stream_id identifies the CONNECT-IP request
+   stream. forwarded means handed to the application or accepted by HTTP
+   for transmission.
+
+   ConnectIPPacketProcessed = {
+       stream_id: uint64
+       source: "application" / "peer"
+       packet: ConnectIPPacket
+       outcome: "forwarded" / "dropped"
+       ? reason: "invalid" /
+                 "source_address_not_allowed" /
+                 "destination_address_not_allowed" /
+                 "protocol_not_allowed" /
+                 "hop_limit_exceeded" /
+                 "packet_too_large" /
+                 "send_error" /
+                 "other"
+       ? icmp_response: {
+           to: "peer" / "application"
+           packet: ConnectIPPacket
+       }
+       * $$http-connectippacketprocessed-extension
+   }
+
+   $ProtocolEventData /= ConnectIPPacketProcessed
+
+   source identifies the input as coming from the application or peer.
+   packet describes it before forwarding changes. icmp_response records
+   a generated response and its destination.
+
+   Capsule and packet events SHOULD be ordered to reflect the address
+   and route state used for each decision.  A local change can take
+   effect when its capsule is created and queued.
+
+4.2.1.  IP Packets
+
+   Header fields retain their wire values; unavailable fields are
+   omitted.  IPv6 extension headers appear in wire order.
+   upper_layer_protocol identifies the protocol after them.
+
+   For raw, length is the observed packet length, payload_length
+   excludes IP and extension headers, and data may contain a prefix of
+   the packet.
+
+   ConnectIPPacket = {
+       ? header: ConnectIPIPv4Header / ConnectIPIPv6Header
+       ? extension_headers: [* ConnectIPIPv6ExtensionHeader]
+       ? upper_layer_protocol: uint8
+       ? icmp: ConnectIPICMP
+       ? raw: RawInfo
+   }
+
+   ConnectIPIPv4Header = {
+       version: 4
+       ? ihl: uint8
+       ? dscp: uint8
+       ? ecn: ECN
+       ? total_length: uint16
+       ? identification: uint16
+       ? flags: uint8
+       ? fragment_offset: uint16
+       ? ttl: uint8
+       ? protocol: uint8
+       ? checksum: uint16
+       ? source_address: IPAddress
+       ? destination_address: IPAddress
+       ? options: RawInfo
+   }
+
+   ConnectIPIPv6Header = {
+       version: 6
+       ? dscp: uint8
+       ? ecn: ECN
+       ? flow_label: uint32
+       ? payload_length: uint16
+       ? next_header: uint8
+       ? hop_limit: uint8
+       ? source_address: IPAddress
+       ? destination_address: IPAddress
+   }
+
+   ConnectIPIPv6ExtensionHeader = {
+       type: uint8
+       ? raw: RawInfo
+   }
+
+4.2.2.  ICMP
+
+   quoted_packet describes the packet quoted by an ICMP error. mtu is
+   the advertised MTU for Packet Too Big or Fragmentation Needed.  ICMP
+   raw excludes the IP header; payload_length excludes the ICMP header.
+
+   ConnectIPICMP = {
+       ? type: uint8
+       ? code: uint8
+       ? checksum: uint16
+       ? mtu: uint32
+       ? quoted_packet: ConnectIPPacket
+       ? raw: RawInfo
+   }
+
+5.  DNS and PREF64 Capsule Schema
+
+   This schema defines representations for the capsules in
+   [CONNECT-IP-DNS].  Its URI is
+   urn:ietf:params:qlog:events:http#connect-ip-dns.
+
+   ConnectIPDNSCapsule = ConnectIPDNSAssignCapsule / ConnectIPPREF64Capsule
+
+   $HTTPCapsule /= ConnectIPDNSCapsule
+
+5.1.  DNS_ASSIGN
+
+   ConnectIPDNSAssignCapsule represents the DNS_ASSIGN capsule defined
+   in Section 3.4 of [CONNECT-IP-DNS].  Each configuration records its
+   nameservers, internal domains, and search domains.
+
+   ConnectIPDNSAssignCapsule = {
+       capsule_type: "dns_assign"
+       dns_configurations: [* ConnectIPDNSConfiguration]
+       ? raw: RawInfo
+   }
+
+   ConnectIPDNSConfiguration = {
+       nameservers: [* ConnectIPDNSNameserver]
+       internal_domains: [* text]
+       search_domains: [* text]
+   }
+
+   ConnectIPDNSNameserver = {
+       service_priority: uint16
+       ipv4_addresses: [* IPAddress]
+       ipv6_addresses: [* IPAddress]
+       authentication_domain_name: text
+       service_parameters: [* ConnectIPDNSServiceParameter]
+   }
+
+   ConnectIPDNSServiceParameter = {
+       key: uint16
+       value: hexstring
+   }
+
+   Domain names retain the presentation format used in the capsule,
+   including empty strings where permitted by [CONNECT-IP-DNS].  Each
+   service parameter records its numeric SvcParamKey and its
+   SvcParamValue wire bytes as a hexadecimal string.  Parameters are
+   listed in ascending key order.
+
+5.2.  PREF64
+
+   ConnectIPPREF64Capsule represents the PREF64 capsule defined in
+   Section 4.1 of [CONNECT-IP-DNS].  The 96 address bits carried in the
+   capsule are followed by 32 zero bits to form the IPv6 address.
+
+   ConnectIPPREF64Capsule = {
+       capsule_type: "pref64"
+       prefixes: [* IPPrefix]
+       ? raw: RawInfo
+   }
+
+6.  Common Data Types
+
+   These types are shared by both event schemas.
+
+6.1.  IPAddress
+
+   IPAddress = text / hexstring
+
+   An IP address can be represented as text, hexadecimal bytes, or a
+   redacted value.  Human-readable IPv4 and IPv6 addresses use dotted-
+   decimal notation and [RFC5952], respectively.
+
+6.2.  IPPrefix
+
+   IPPrefix = text
+
+   An IP prefix is a textual address, a slash, and a decimal prefix
+   length, for example 192.0.2.0/24 or 2001:db8::/64.
+
+7.  Security Considerations
+
+   The security and privacy considerations in [QLOG-MAIN] apply.
+   Headers, configuration, and raw data can reveal network topology,
+   user activity, and application data.  Implementations should minimize
+   capture and protect logs.
+
+8.  IANA Considerations
+
+   This document requests two entries in the "qlog event schema URIs"
+   registry defined in Section 15 of [QLOG-MAIN].
+
+8.1.  CONNECT-IP Schema
+
+   Event schema URI:  urn:ietf:params:qlog:events:http#connect-ip
+
+   Namespace:  http
+
+   Event Types:  connect_ip_packet_processed
+
+   Description:  Capsule representations and packet processing events
+      for CONNECT-IP.
+
+   Reference:  Section 4 of this document.
+
+8.2.  DNS and PREF64 Capsule Schema
+
+   Event schema URI:  urn:ietf:params:qlog:events:http#connect-ip-dns
+
+   Namespace:  http
+
+   Event Types:  None.  This schema extends the capsule data types of
+      existing events.
+
+   Description:  Capsule representations for the CONNECT-IP DNS and
+      PREF64 extensions.
+
+   Reference:  Section 5 of this document.
+
+9.  Normative References
+
+   [CDDL]     Birkholz, H., Vigano, C., and C. Bormann, "Concise Data
+              Definition Language (CDDL): A Notational Convention to
+              Express Concise Binary Object Representation (CBOR) and
+              JSON Data Structures", RFC 8610, DOI 10.17487/RFC8610,
+              June 2019, <https://www.rfc-editor.org/rfc/rfc8610>.
+
+   [CONNECT-IP]
+              Pauly, T., Ed., Schinazi, D., Chernyakhovsky, A.,
+              Kühlewind, M., and M. Westerlund, "Proxying IP in HTTP",
+              RFC 9484, DOI 10.17487/RFC9484, October 2023,
+              <https://www.rfc-editor.org/rfc/rfc9484>.
+
+   [CONNECT-IP-DNS]
+              Schinazi, D. and Y. Rosomakho, "DNS and PREF64
+              Configuration for Proxying IP in HTTP", Work in Progress,
+              Internet-Draft, draft-ietf-masque-connect-ip-dns-07, 13
+              October 2026, <https://datatracker.ietf.org/doc/html/
+              draft-ietf-masque-connect-ip-dns-07>.
+
+   [QLOG-HTTP]
+              Marx, R., Niccolini, L., Seemann, M., and L. Pardue,
+              "HTTP/3 qlog event definitions", Work in Progress,
+              Internet-Draft, draft-ietf-quic-qlog-h3-events-13, 6 July
+              2026, <https://datatracker.ietf.org/doc/html/draft-ietf-
+              quic-qlog-h3-events-13>.
+
+   [QLOG-MAIN]
+              Marx, R., Niccolini, L., Seemann, M., and L. Pardue,
+              "qlog: Structured Logging for Network Protocols", Work in
+              Progress, Internet-Draft, draft-ietf-quic-qlog-main-
+              schema-14, 6 July 2026,
+              <https://datatracker.ietf.org/doc/html/draft-ietf-quic-
+              qlog-main-schema-14>.
+
+   [QLOG-QUIC]
+              Marx, R., Niccolini, L., Seemann, M., and L. Pardue, "QUIC
+              event definitions for qlog", Work in Progress, Internet-
+              Draft, draft-ietf-quic-qlog-quic-events-13, 6 July 2026,
+              <https://datatracker.ietf.org/doc/html/draft-ietf-quic-
+              qlog-quic-events-13>.
+
+   [RFC2119]  Bradner, S., "Key words for use in RFCs to Indicate
+              Requirement Levels", BCP 14, RFC 2119,
+              DOI 10.17487/RFC2119, March 1997,
+              <https://www.rfc-editor.org/rfc/rfc2119>.
+
+   [RFC5952]  Kawamura, S. and M. Kawashima, "A Recommendation for IPv6
+              Address Text Representation", RFC 5952,
+              DOI 10.17487/RFC5952, August 2010,
+              <https://www.rfc-editor.org/rfc/rfc5952>.
+
+   [RFC8174]  Leiba, B., "Ambiguity of Uppercase vs Lowercase in RFC
+              2119 Key Words", BCP 14, RFC 8174, DOI 10.17487/RFC8174,
+              May 2017, <https://www.rfc-editor.org/rfc/rfc8174>.
+
+Author's Address
+
+   Marten Seemann
+   Email: martenseemann@gmail.com
